@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Google Sheet → Table</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 18px; background:#f7f7f7; color:#111; }
+    h1 { margin-bottom: 8px; }
+    #controls { margin: 12px 0; display:flex; gap:8px; align-items:center; }
+    table { border-collapse: collapse; width:100%; background:white; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
+    th, td { padding: 10px 12px; border: 1px solid #e6e6e6; text-align: left; }
+    th { background:#fafafa; cursor: default; user-select:none; }
+    tbody tr:nth-child(odd) { background:#fff; }
+    tbody tr:nth-child(even) { background:#fcfcfc; }
+    #status { margin-top:10px; color:#666; }
+    .small { font-size:0.9em; color:#666; }
+    #search { padding:8px; border-radius:4px; border:1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Ramdev Mobile</h1>
+  <div id="controls">
+    <label class="small">Search:</label>
+    <input id="search" placeholder="Filter by brand, model, quantity..." />
+    <button id="refresh">Refresh</button>
+  </div>
+  <table id="sheetTable" aria-live="polite">
+    <thead>
+      <tr id="tableHead"></tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div id="status">Status: <span id="statusText">Idle</span></div>
+  <script>
+    // CONFIG - replace these two values
+    const API_KEY = 'AIzaSyALttxCdWDba_Awqh4cScaeK_wEAjDg3r0';   // <-- Put your Google API KEY here
+    const SHEET_ID = '1gwmMUplZqWGAO7OkUsnoK_e8zqPGfKdojl2uVnbxl1k'; // <-- Put your Google Sheet ID here
+    // RANGE: sheet name and range. Use Sheet1!A1:C if your data is in columns A-C and row1 is header.
+    const RANGE = 'Sheet1!A1:C9999';
+
+    const statusText = document.getElementById('statusText');
+    const tableHead = document.getElementById('tableHead');
+    const tableBody = document.getElementById('tableBody');
+    const searchInput = document.getElementById('search');
+    const refreshBtn = document.getElementById('refresh');
+
+    async function fetchSheet() {
+      statusText.textContent = 'Loading...';
+      tableHead.innerHTML = '';
+      tableBody.innerHTML = '';
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(RANGE)}?key=${API_KEY}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' - ' + res.statusText);
+        const json = await res.json();
+        if (!json.values || json.values.length === 0) {
+          statusText.textContent = 'No data found in the specified range.';
+          return;
+        }
+        renderTable(json.values);
+        statusText.textContent = `Loaded ${json.values.length - 1} rows.`;
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function renderTable(values) {
+      // Assume first row is header
+      const header = values[0];
+      // Build header
+      tableHead.innerHTML = '';
+      header.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h || '';
+        tableHead.appendChild(th);
+      });
+
+      // Body rows
+      const rows = values.slice(1).map(r => {
+        // pad row to header length
+        const padded = header.map((_, i) => r[i] ?? '');
+        return padded;
+      });
+
+      window._sheetRows = rows; // store globally for filtering
+      applyFilter(); // initially render
+    }
+
+    function applyFilter() {
+      const q = (searchInput.value || '').trim().toLowerCase();
+      tableBody.innerHTML = '';
+      const rows = window._sheetRows || [];
+      const filtered = q ? rows.filter(r => r.join(' ').toLowerCase().includes(q)) : rows;
+
+      if (filtered.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = (document.querySelectorAll('#tableHead th').length || 3);
+        td.style.textAlign = 'center';
+        td.style.padding = '20px';
+        td.textContent = 'No rows match the filter.';
+        tr.appendChild(td);
+        tableBody.appendChild(tr);
+        return;
+      }
+
+      filtered.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(cell => {
+          const td = document.createElement('td');
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // event handlers
+    searchInput.addEventListener('input', () => applyFilter());
+    refreshBtn.addEventListener('click', () => fetchSheet());
+
+    // initial load
+    fetchSheet();
+  </script>
+</body>
+</html>
